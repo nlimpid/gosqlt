@@ -5,20 +5,21 @@ import (
 	"fmt"
 )
 
-// Scanner used for scan target
+// Scanner is an interface for scanning database rows into struct fields.
 type Scanner interface {
-	// ScanTargets return the slice of scan target
+	// ScanTargets returns a slice of pointers to scan targets for the given columns.
 	ScanTargets(columns []string) []any
 }
 
-// ScannerPtr force the pointer
-type ScannerPtr[T any] interface {
+// Ptr is an interface constraint that requires a pointer to T implementing Scanner.
+// It's used as a hook for ScanStruct to ensure type safety.
+type Ptr[T any] interface {
 	*T
 	Scanner
 }
 
-// ScanStruct scan single row
-func ScanStruct[T any, P ScannerPtr[T]](rows *sql.Rows) (T, error) {
+// ScanStruct scans a single row from the result set into a struct.
+func ScanStruct[T any, P Ptr[T]](rows *sql.Rows) (T, error) {
 	var result T
 
 	if !rows.Next() {
@@ -41,8 +42,8 @@ func ScanStruct[T any, P ScannerPtr[T]](rows *sql.Rows) (T, error) {
 	return result, nil
 }
 
-// ScanStructs Scan multiple structs
-func ScanStructs[T any, P ScannerPtr[T]](rows *sql.Rows) ([]*T, error) {
+// ScanStructs scans multiple rows from the result set into a slice of struct pointers.
+func ScanStructs[T any, P Ptr[T]](rows *sql.Rows) ([]*T, error) {
 	columns, err := rows.Columns()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get columns: %w", err)
@@ -66,8 +67,8 @@ func ScanStructs[T any, P ScannerPtr[T]](rows *sql.Rows) ([]*T, error) {
 	return results, nil
 }
 
-// QueryStruct single query
-func QueryStruct[T any, P ScannerPtr[T]](db *sql.DB, query string, args ...any) (T, error) {
+// QueryStruct executes a query and scans a single row into a struct.
+func QueryStruct[T any, P Ptr[T]](db *sql.DB, query string, args ...any) (T, error) {
 	rows, err := db.Query(query, args...)
 	if err != nil {
 		var zero T
@@ -78,8 +79,8 @@ func QueryStruct[T any, P ScannerPtr[T]](db *sql.DB, query string, args ...any) 
 	return ScanStruct[T, P](rows)
 }
 
-// QueryStructs query struct array
-func QueryStructs[T any, P ScannerPtr[T]](db *sql.DB, query string, args ...any) ([]*T, error) {
+// QueryStructs executes a query and scans multiple rows into a slice of struct pointers.
+func QueryStructs[T any, P Ptr[T]](db *sql.DB, query string, args ...any) ([]*T, error) {
 	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err
@@ -89,7 +90,8 @@ func QueryStructs[T any, P ScannerPtr[T]](db *sql.DB, query string, args ...any)
 	return ScanStructs[T, P](rows)
 }
 
-// ScanMap Helper function, create needed mapping
+// ScanMap is a helper function that creates a slice of scan targets based on a column-to-field mapping.
+// Columns not found in the mapping will use a placeholder.
 func ScanMap(columns []string, mapping map[string]any) []any {
 	targets := make([]any, len(columns))
 	for i, col := range columns {
