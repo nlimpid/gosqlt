@@ -1,6 +1,6 @@
 module github.com/nlimpid/gosqlt
 
-go 1.24.3
+go 1.24.0
 
 require (
 	github.com/marcboeker/go-duckdb/v2 v2.4.1

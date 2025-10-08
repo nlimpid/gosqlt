@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 )
@@ -68,8 +69,8 @@ func ScanStructs[T any, P Ptr[T]](rows *sql.Rows) ([]*T, error) {
 }
 
 // QueryStruct executes a query and scans a single row into a struct.
-func QueryStruct[T any, P Ptr[T]](db *sql.DB, query string, args ...any) (T, error) {
-	rows, err := db.Query(query, args...)
+func QueryStruct[T any, P Ptr[T]](ctx context.Context, db *sql.DB, query string, args ...any) (T, error) {
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		var zero T
 		return zero, err
@@ -80,13 +81,12 @@ func QueryStruct[T any, P Ptr[T]](db *sql.DB, query string, args ...any) (T, err
 }
 
 // QueryStructs executes a query and scans multiple rows into a slice of struct pointers.
-func QueryStructs[T any, P Ptr[T]](db *sql.DB, query string, args ...any) ([]*T, error) {
-	rows, err := db.Query(query, args...)
+func QueryStructs[T any, P Ptr[T]](ctx context.Context, db *sql.DB, query string, args ...any) ([]*T, error) {
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-
 	return ScanStructs[T, P](rows)
 }
 

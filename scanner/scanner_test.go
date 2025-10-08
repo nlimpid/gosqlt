@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"database/sql"
 	"log/slog"
 	"testing"
@@ -114,7 +115,7 @@ func (s *ScannerTestDuckdbSuite) TestQueryStruct() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			result, err := QueryStruct[Foo](s.db, tt.query, tt.args...)
+			result, err := QueryStruct[Foo](context.Background(), s.db, tt.query, tt.args...)
 			if tt.wantErr {
 				assert.Error(s.T(), err)
 			} else {
@@ -179,7 +180,7 @@ func (s *ScannerTestDuckdbSuite) TestQueryStructs() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			results, err := QueryStructs[Bar](s.db, tt.query, tt.args...)
+			results, err := QueryStructs[Bar](context.Background(), s.db, tt.query, tt.args...)
 			if tt.wantErr {
 				assert.Error(s.T(), err)
 			} else {
@@ -360,7 +361,7 @@ func TestQueryStructs_NoCache(t *testing.T) {
           FROM generate_series(1, 1000000) as t(i)
       `
 	start := time.Now()
-	results, err := QueryStructs[Foo](db, query)
+	results, err := QueryStructs[Foo](context.Background(), db, query)
 	require.NoError(t, err)
 	assert.Equal(t, 1000000, len(results))
 
@@ -383,7 +384,7 @@ func BenchmarkQueryStructs(b *testing.B) {
       `
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := QueryStructs[Foo](db, query)
+		_, err := QueryStructs[Foo](context.Background(), db, query)
 		if err != nil {
 			b.Fatal(err)
 		}
