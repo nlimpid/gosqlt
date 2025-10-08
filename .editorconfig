@@ -21,5 +21,5 @@ indent_style = tab
 [*.nix]
 indent_size = 2
 
-[.golangci.yaml]
+[*.yaml]
 indent_size = 2
