@@ -19,17 +19,31 @@ type Ptr[T any] interface {
 	Scanner
 }
 
+// QueryOption configures query behavior.
+type QueryOption func(*queryConfig)
+
+type queryConfig struct {
+	expectedSize int
+}
+
+// WithExpectedSize pre-allocates slice capacity for better performance.
+func WithExpectedSize(size int) QueryOption {
+	return func(c *queryConfig) {
+		c.expectedSize = size
+	}
+}
+
 // ScanStruct scans a single row from the result set into a struct.
-func ScanStruct[T any, P Ptr[T]](rows *sql.Rows) (T, error) {
+func ScanStruct[T any, P Ptr[T]](rows *sql.Rows) (*T, error) {
 	var result T
 
 	if !rows.Next() {
-		return result, sql.ErrNoRows
+		return nil, sql.ErrNoRows
 	}
 
 	columns, err := rows.Columns()
 	if err != nil {
-		return result, fmt.Errorf("failed to get columns: %w", err)
+		return nil, fmt.Errorf("failed to get columns: %w", err)
 	}
 
 	// Use pointer to get scan targets
@@ -37,20 +51,25 @@ func ScanStruct[T any, P Ptr[T]](rows *sql.Rows) (T, error) {
 	targets := ptr.ScanTargets(columns)
 
 	if err := rows.Scan(targets...); err != nil {
-		return result, fmt.Errorf("failed to scan row: %w", err)
+		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
 
-	return result, nil
+	return &result, nil
 }
 
 // ScanStructs scans multiple rows from the result set into a slice of struct pointers.
-func ScanStructs[T any, P Ptr[T]](rows *sql.Rows) ([]*T, error) {
+func ScanStructs[T any, P Ptr[T]](rows *sql.Rows, opts ...QueryOption) ([]*T, error) {
+	cfg := &queryConfig{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
 	columns, err := rows.Columns()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get columns: %w", err)
 	}
-	// TODO: maybe can fix it
-	results := make([]*T, 0)
+
+	results := make([]*T, 0, cfg.expectedSize)
 	for rows.Next() {
 		var result T
 		ptr := P(&result)
@@ -69,11 +88,10 @@ func ScanStructs[T any, P Ptr[T]](rows *sql.Rows) ([]*T, error) {
 }
 
 // QueryStruct executes a query and scans a single row into a struct.
-func QueryStruct[T any, P Ptr[T]](ctx context.Context, db *sql.DB, query string, args ...any) (T, error) {
+func QueryStruct[T any, P Ptr[T]](ctx context.Context, db *sql.DB, query string, args ...any) (*T, error) {
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
-		var zero T
-		return zero, err
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -81,13 +99,13 @@ func QueryStruct[T any, P Ptr[T]](ctx context.Context, db *sql.DB, query string,
 }
 
 // QueryStructs executes a query and scans multiple rows into a slice of struct pointers.
-func QueryStructs[T any, P Ptr[T]](ctx context.Context, db *sql.DB, query string, args ...any) ([]*T, error) {
+func QueryStructs[T any, P Ptr[T]](ctx context.Context, db *sql.DB, query string, args []any, opts ...QueryOption) ([]*T, error) {
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	return ScanStructs[T, P](rows)
+	return ScanStructs[T, P](rows, opts...)
 }
 
 // ScanMap is a helper function that creates a slice of scan targets based on a column-to-field mapping.
