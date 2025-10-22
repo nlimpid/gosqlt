@@ -1,4 +1,4 @@
-package scanner
+package tests
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"time"
 
 	_ "github.com/marcboeker/go-duckdb/v2"
+	"github.com/nlimpid/gosqlt/scanner"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -44,7 +45,7 @@ type Foo struct {
 
 func (f *Foo) ScanTargets(columns []string) []any {
 	// Use helper function to simplify implementation
-	return ScanMap(columns, map[string]any{
+	return scanner.ScanMap(columns, map[string]any{
 		"id":         &f.ID,
 		"name":       &f.Name,
 		"class_time": &f.ClassTime,
@@ -58,7 +59,7 @@ type Bar struct {
 }
 
 func (b *Bar) ScanTargets(columns []string) []any {
-	return ScanMap(columns, map[string]any{
+	return scanner.ScanMap(columns, map[string]any{
 		"id":    &b.ID,
 		"value": &b.Value,
 	})
@@ -115,7 +116,7 @@ func (s *ScannerTestDuckdbSuite) TestQueryStruct() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			result, err := QueryStruct[Foo](context.Background(), s.db, tt.query, tt.args...)
+			result, err := scanner.QueryStruct[Foo](context.Background(), s.db, tt.query, tt.args...)
 			if tt.wantErr {
 				assert.Error(s.T(), err)
 			} else {
@@ -180,7 +181,7 @@ func (s *ScannerTestDuckdbSuite) TestQueryStructs() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			results, err := QueryStructs[Bar](context.Background(), s.db, tt.query, tt.args, WithExpectedSize(tt.wantCount))
+			results, err := scanner.QueryStructs[Bar](context.Background(), s.db, tt.query, tt.args, scanner.WithExpectedSize(tt.wantCount))
 			if tt.wantErr {
 				assert.Error(s.T(), err)
 			} else {
@@ -229,7 +230,7 @@ func (s *ScannerTestDuckdbSuite) TestScanStruct() {
 			require.NoError(s.T(), err)
 			defer rows.Close()
 
-			result, err := ScanStruct[Bar](rows)
+			result, err := scanner.ScanStruct[Bar](rows)
 			if tt.wantErr {
 				assert.Error(s.T(), err)
 			} else {
@@ -268,7 +269,7 @@ func (s *ScannerTestDuckdbSuite) TestScanStructs() {
 			require.NoError(s.T(), err)
 			defer rows.Close()
 
-			results, err := ScanStructs[Bar](rows)
+			results, err := scanner.ScanStructs[Bar](rows)
 			if tt.wantErr {
 				assert.Error(s.T(), err)
 			} else {
@@ -342,7 +343,7 @@ func TestScanMap(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ScanMap(tt.columns, tt.mapping)
+			result := scanner.ScanMap(tt.columns, tt.mapping)
 			tt.verify(t, result)
 		})
 	}
@@ -361,7 +362,7 @@ func TestQueryStructs_NoCache(t *testing.T) {
           FROM generate_series(1, 1000000) as t(i)
       `
 	start := time.Now()
-	results, err := QueryStructs[Foo](context.Background(), db, query, nil, WithExpectedSize(1000000))
+	results, err := scanner.QueryStructs[Foo](context.Background(), db, query, nil, scanner.WithExpectedSize(1000000))
 	require.NoError(t, err)
 	assert.Equal(t, 1000000, len(results))
 
@@ -384,7 +385,7 @@ func BenchmarkQueryStructs(b *testing.B) {
       `
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := QueryStructs[Foo](context.Background(), db, query, nil, WithExpectedSize(1000000))
+		_, err := scanner.QueryStructs[Foo](context.Background(), db, query, nil, scanner.WithExpectedSize(1000000))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -404,6 +405,6 @@ func BenchmarkScanMap(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = ScanMap(columns, mapping)
+		_ = scanner.ScanMap(columns, mapping)
 	}
 }
