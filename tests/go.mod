@@ -2,7 +2,7 @@ module github.com/nlimpid/gosqlt/tests
 
 go 1.25.3
 
-replace github.com/nlimpid/gosqlt => ..
+replace github.com/nlimpid/gosqlt => ../
 
 require (
 	github.com/marcboeker/go-duckdb/v2 v2.4.3
