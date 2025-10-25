@@ -6,14 +6,18 @@ import (
 	"fmt"
 )
 
-// Scanner is an interface for scanning database rows into struct fields.
+// Scanner describes a type that knows how to turn a set of database column
+// names into destinations that the standard library's sql.Rows can write into.
+// See ScanTargets for the detailed contract.
 type Scanner interface {
-	// ScanTargets returns a slice of pointers to scan targets for the given columns.
+	// ScanTargets returns a slice of pointers matching the provided columns.
+	// Each entry must be safe to pass to (*sql.Rows).Scan in the same order.
 	ScanTargets(columns []string) []any
 }
 
-// Ptr is an interface constraint that requires a pointer to T implementing Scanner.
-// It's used as a hook for ScanStruct to ensure type safety.
+// Ptr is a generic type constraint requiring a pointer to T that also implements
+// Scanner. It lets ScanStruct and friends control the creation of new values
+// while still letting the user provide custom ScanTargets logic.
 type Ptr[T any] interface {
 	*T
 	Scanner
@@ -26,14 +30,18 @@ type queryConfig struct {
 	expectedSize int
 }
 
-// WithExpectedSize pre-allocates slice capacity for better performance.
+// WithExpectedSize pre-allocates slice capacity for better performance. It is
+// primarily used with ScanStructs and QueryStructs when you know the expected
+// number of rows ahead of time.
 func WithExpectedSize(size int) QueryOption {
 	return func(c *queryConfig) {
 		c.expectedSize = size
 	}
 }
 
-// ScanStruct scans a single row from the result set into a struct.
+// ScanStruct reads the first row from rows and decodes it into a new struct
+// value. It stops after the first row and returns sql.ErrNoRows when the result
+// set is empty.
 func ScanStruct[T any, P Ptr[T]](rows *sql.Rows) (*T, error) {
 	var result T
 
@@ -57,7 +65,9 @@ func ScanStruct[T any, P Ptr[T]](rows *sql.Rows) (*T, error) {
 	return &result, nil
 }
 
-// ScanStructs scans multiple rows from the result set into a slice of struct pointers.
+// ScanStructs consumes rows and returns one pointer per row in the order they
+// are produced by the driver. Combine it with WithExpectedSize to avoid slice
+// resizing during large iterations.
 func ScanStructs[T any, P Ptr[T]](rows *sql.Rows, opts ...QueryOption) ([]*T, error) {
 	cfg := &queryConfig{}
 	for _, opt := range opts {
@@ -87,7 +97,8 @@ func ScanStructs[T any, P Ptr[T]](rows *sql.Rows, opts ...QueryOption) ([]*T, er
 	return results, nil
 }
 
-// QueryStruct executes a query and scans a single row into a struct.
+// QueryStruct runs query against db with the provided args, then delegates to
+// ScanStruct. The underlying rows cursor is closed automatically.
 func QueryStruct[T any, P Ptr[T]](ctx context.Context, db *sql.DB, query string, args ...any) (*T, error) {
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -98,7 +109,9 @@ func QueryStruct[T any, P Ptr[T]](ctx context.Context, db *sql.DB, query string,
 	return ScanStruct[T, P](rows)
 }
 
-// QueryStructs executes a query and scans multiple rows into a slice of struct pointers.
+// QueryStructs runs query against db with the supplied args slice, applying the
+// given QueryOptions before delegating to ScanStructs. The returned rows cursor
+// is closed automatically.
 func QueryStructs[T any, P Ptr[T]](ctx context.Context, db *sql.DB, query string, args []any, opts ...QueryOption) ([]*T, error) {
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -108,8 +121,9 @@ func QueryStructs[T any, P Ptr[T]](ctx context.Context, db *sql.DB, query string
 	return ScanStructs[T, P](rows, opts...)
 }
 
-// ScanMap is a helper function that creates a slice of scan targets based on a column-to-field mapping.
-// Columns not found in the mapping will use a placeholder.
+// ScanMap creates a ScanTargets-compatible slice from a column-to-field map.
+// Columns not present in mapping receive a throwaway placeholder pointer so the
+// caller can ignore unexpected projections safely.
 func ScanMap(columns []string, mapping map[string]any) []any {
 	targets := make([]any, len(columns))
 	for i, col := range columns {
